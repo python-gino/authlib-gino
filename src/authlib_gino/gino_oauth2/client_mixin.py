@@ -28,6 +28,7 @@ class ClientMixin(OAuth2ClientMixin):
     jwks = ArrayProperty(default=[], prop_name="_client_metadata")
     software_id = StringProperty(prop_name="_client_metadata")
     software_version = StringProperty(prop_name="_client_metadata")
+    audience = StringProperty(prop_name="_client_metadata")
 
     is_active = Column(Boolean(), nullable=False, default=True)
 
