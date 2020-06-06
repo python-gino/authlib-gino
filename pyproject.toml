@@ -8,7 +8,11 @@ license = "BSD-3-Clause"
 [tool.poetry.dependencies]
 python = "^3.8"
 authlib = "^0.14.3"
-gino = "^1.0.0"
+gino = "*"
+starlette = {version = "^0.13.2", optional = true}
+
+[tool.poetry.extras]
+starlette = ["starlette"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.4.3"
