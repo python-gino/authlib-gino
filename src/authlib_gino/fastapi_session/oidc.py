@@ -1,8 +1,12 @@
 import logging
+import time
 
+from authlib.jose import jwt
 from authlib.oauth2.rfc6749 import OAuth2Error
 from fastapi import FastAPI, APIRouter, Security, Request, Form, Query
-from starlette.responses import JSONResponse
+from starlette import status
+from starlette.responses import JSONResponse, HTMLResponse
+from starlette.routing import NoMatchFound
 
 from .api import (
     AUTHORIZATION_ENDPOINT,
@@ -12,6 +16,7 @@ from .api import (
     JWKS_URI,
     auth,
     require_user,
+    current_user,
     metadata,
 )
 from ..fastapi_session import config
@@ -34,7 +39,8 @@ def jwks():
 # noinspection PyUnusedLocal
 @router.get(AUTHORIZATION_ENDPOINT)
 async def authorization_endpoint(
-    request: Request,
+    req: Request,
+    user: User = Security(current_user),
     scope: str = Query(
         ...,
         description='OpenID Connect requests MUST contain the "openid" scope value. '
@@ -69,6 +75,14 @@ async def authorization_endpoint(
         "mitigation is done by cryptographically binding the value of this parameter "
         "with a browser cookie.",
     ),
+    idp: str = Query(
+        None,
+        description="OPTIONAL. Case sensitive ASCII strin that specifies the selected "
+        "IdP the Authorization Server should use to authenticate the user.",
+    ),
+    idp_params: str = Query(
+        None, description="OPTIONAL. URL-encoded query string to pass to the IdP."
+    ),
     nonce: str = Query(
         None,
         description="OPTIONAL. String value used to associate a Client session with "
@@ -76,6 +90,13 @@ async def authorization_endpoint(
         "unmodified from the Authentication Request to the ID Token. Sufficient "
         "entropy MUST be present in the nonce values used to prevent attackers from "
         "guessing values.",
+    ),
+    prompt: str = Query(
+        None,
+        description="OPTIONAL. Space delimited, case sensitive list of ASCII string "
+        "values that specifies whether the Authorization Server prompts the End-User "
+        "for reauthentication and consent. If json is in prompt, a JSON response will "
+        "be returned with necessary information to continue the authentication.",
     ),
     code_challenge: str = Query(
         None,
@@ -92,19 +113,35 @@ async def authorization_endpoint(
     Authentication and Authorization, using request parameters defined by OAuth 2.0 and
     additional parameters and parameter values defined by OpenID Connect.
     """
-    if config.DEBUG and config.USE_DEMO_LOGIN:
-        from .demo_login import confirm_login
-
-        return await confirm_login(request)
-
     try:
-        grant = await auth.validate_consent_request(request)
-        return dict(
-            scope=grant.request.scope,
-            hint="Replace 'authorize' with 'login' in URL to continue",
-        )
+        request = await auth.create_oauth2_request(req)
+        request.user = user
+        await auth.get_authorization_grant(request).validate_consent_request()
     except OAuth2Error as error:
         return JSONResponse(dict(error.get_body()), status_code=error.status_code)
+
+    prompt = request.data.get("prompt", "")
+    prompts = prompt.split()
+    if "json" in prompts or config.DEBUG and config.USE_DEMO_LOGIN:
+        now = int(time.time())
+        token = jwt.encode(
+            dict(alg=config.JWT_ALGORITHM),
+            dict(
+                iss=config.JWT_ISSUER,
+                iat=now,
+                exp=now + config.LOGIN_CONTEXT_TTL,
+                ctx=request.data,
+            ),
+            config.JWT_PRIVATE_KEY,
+        ).decode("ASCII")
+        if "json" not in prompts:
+            url = req.url_for("demo_login") + "?token=" + token
+            return HTMLResponse(f'<html><body><a href="{url}">{url}</a></body></html>')
+        return dict(scope=request.scope, params=idp_params, context=token)
+
+    return JSONResponse(
+        dict(error="Not implemented"), status_code=status.HTTP_501_NOT_IMPLEMENTED
+    )
 
 
 # noinspection PyUnusedLocal
@@ -171,4 +208,10 @@ def init_app(app: FastAPI):
         "usePkceWithAuthorizationCodeGrant": True,
         "additionalQueryStringParams": dict(nonce="public-nonce"),
     }
+    if config.DEBUG and config.USE_DEMO_LOGIN:
+        from .demo_login import demo_login
+
+        router.get(
+            "/demo_login", summary="Demo login", name="demo_login", tags=["Demo"]
+        )(demo_login)
     app.include_router(router, tags=["OpenID Connect"])

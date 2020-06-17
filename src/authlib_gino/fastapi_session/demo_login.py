@@ -1,16 +1,15 @@
 import time
 
-from fastapi import FastAPI
+from fastapi import Depends
 from starlette.requests import Request
 
-from .api import auth
+from .api import auth, login_context
 from .models import Identity
 from .models import db
-from ..fastapi_session import config
 from ..fastapi_session.models import User
 
 
-async def confirm_login(request: Request):
+async def demo_login(request: Request, context=Depends(login_context)):
     # request should contain all parameters in AUTHORIZATION_ENDPOINT
     user = await (
         User.query.select_from(Identity.outerjoin(User))
@@ -41,9 +40,4 @@ WITH new_user AS (
                 now=int(time.time()),
             ),
         )
-    return await auth.create_authorization_response(request, user)
-
-
-def init_app(app: FastAPI):
-    if config.DEBUG and not config.USE_DEMO_LOGIN:
-        app.get("/oauth2/login", summary="Demo login", tags=["Demo"])(confirm_login)
+    return await auth.create_authorization_response(request, user, context)

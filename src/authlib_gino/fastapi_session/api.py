@@ -1,6 +1,7 @@
 from typing import Union, Tuple, Optional
 
-from authlib.jose import JWT
+from authlib.jose import jwt
+from authlib.jose.errors import ExpiredTokenError, JoseError
 from authlib.oauth2.rfc6749.util import scope_to_list
 from authlib.oauth2.rfc7636 import CodeChallenge
 from authlib.oidc.discovery import OpenIDProviderMetadata
@@ -31,7 +32,6 @@ TOKEN_ENDPOINT = "/oauth2/token"
 USERINFO_ENDPOINT = "/userinfo"
 JWKS_URI = "/.well-known/jwks.json"
 
-jwt = JWT(algorithms=config.JWT_ALGORITHM)
 oidc_scheme = JWTBearer(
     AUTHORIZATION_ENDPOINT,
     TOKEN_ENDPOINT,
@@ -109,3 +109,18 @@ def current_scopes(
     if token is None:
         return set()
     return set(scope_to_list(token["sco"]))
+
+
+def login_context(token: str):
+    if not token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    try:
+        token = jwt.decode(token, config.JWT_PUBLIC_KEY)
+        token.validate()
+    except ExpiredTokenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except JoseError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return token["ctx"]

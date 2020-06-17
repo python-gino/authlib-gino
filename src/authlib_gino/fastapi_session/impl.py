@@ -3,7 +3,7 @@ import time
 from typing import Union, Tuple
 
 from authlib.common.security import generate_token
-from authlib.jose import JWT, jwt
+from authlib.jose import jwt
 from authlib.jose.errors import ExpiredTokenError, JoseError
 from authlib.oauth2 import OAuth2Request
 from authlib.oidc.core import UserInfo
@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 class AuthorizationServer(_AuthorizationServer):
     def _generate_access_token(self, client, grant_type, user, scope):
         now = int(time.time())
-        token = JWT(algorithms=config.JWT_ALGORITHM).encode(
+        token = jwt.encode(
             dict(alg=config.JWT_ALGORITHM),
             dict(
                 iss=config.JWT_ISSUER,

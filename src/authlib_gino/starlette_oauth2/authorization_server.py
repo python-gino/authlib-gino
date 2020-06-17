@@ -52,16 +52,18 @@ class AuthorizationServer(_AuthorizationServer):
         # TODO
         pass
 
-    async def create_oauth2_request(self, request: Request):
-        body = None
+    async def create_oauth2_request(self, request: Request, data=None):
+        body = {}
         if request.method == "POST":
             body = await request.form()
+        if data:
+            body.update(data)
         return OAuth2Request(request.method, str(request.url), body, request.headers)
 
     async def create_authorization_response(
-        self, request: Request = None, grant_user=None
+        self, request: Request = None, grant_user=None, data=None,
     ):
-        request = await self.create_oauth2_request(request)
+        request = await self.create_oauth2_request(request, data)
         try:
             grant = self.get_authorization_grant(request)
         except InvalidGrantError as error:

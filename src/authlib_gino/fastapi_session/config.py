@@ -67,4 +67,5 @@ JWT_AUTH_CODE_TTL = config("JWT_AUTH_CODE_TTL", cast=int, default=300)  # 5 minu
 JWT_TOKEN_TTL = config("JWT_TOKEN_TTL", cast=int, default=1800)  # 30 minutes
 JWT_ACCESS_TOKEN_COOKIE = config("JWT_ACCESS_TOKEN_COOKIE", default="access_token")
 
+LOGIN_CONTEXT_TTL = config("LOGIN_CONTEXT_TTL", cast=int, default=300)  # 5 minutes
 SESSION_TTL = config("SESSION_TTL", cast=int, default=100)  # 100 days
