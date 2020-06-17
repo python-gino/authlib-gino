@@ -6,7 +6,6 @@ from authlib.oauth2.rfc6749 import OAuth2Error
 from fastapi import FastAPI, APIRouter, Security, Request, Form, Query
 from starlette import status
 from starlette.responses import JSONResponse, HTMLResponse
-from starlette.routing import NoMatchFound
 
 from .api import (
     AUTHORIZATION_ENDPOINT,
@@ -211,7 +210,5 @@ def init_app(app: FastAPI):
     if config.DEBUG and config.USE_DEMO_LOGIN:
         from .demo_login import demo_login
 
-        router.get(
-            "/demo_login", summary="Demo login", name="demo_login", tags=["Demo"]
-        )(demo_login)
+        router.get("/demo_login", summary="Demo login", name="demo_login")(demo_login)
     app.include_router(router, tags=["OpenID Connect"])
