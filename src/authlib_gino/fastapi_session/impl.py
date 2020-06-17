@@ -1,10 +1,17 @@
 import logging
 import time
+from typing import Union, Tuple
 
 from authlib.common.security import generate_token
-from authlib.jose import JWT
+from authlib.jose import JWT, jwt
+from authlib.jose.errors import ExpiredTokenError, JoseError
 from authlib.oauth2 import OAuth2Request
 from authlib.oidc.core import UserInfo
+from fastapi import HTTPException
+from fastapi.security import OAuth2AuthorizationCodeBearer
+from fastapi.security.utils import get_authorization_scheme_param
+from starlette.requests import Request
+from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_400_BAD_REQUEST
 
 from .models import db
 from ..async_grants.authorization_code import (
@@ -147,3 +154,41 @@ class OpenIDCode(_OpenIDCode):
 
     def generate_user_info(self, user, scope):
         return UserInfo(sub=str(user.get_user_id()))
+
+
+class JWTBearer(OAuth2AuthorizationCodeBearer):
+    async def __call__(
+        self, request: Request
+    ) -> Tuple[bool, Union[dict, HTTPException]]:
+        authorization: str = request.headers.get("Authorization")
+        scheme, token = get_authorization_scheme_param(authorization)
+        if not authorization or scheme.lower() != "bearer":
+            token = request.cookies.get(config.JWT_ACCESS_TOKEN_COOKIE)
+        if not token:
+            error = HTTPException(
+                status_code=HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            if self.auto_error:
+                raise error
+            else:
+                return False, error
+
+        try:
+            token = jwt.decode(token, config.JWT_PUBLIC_KEY)
+            token.validate()
+        except ExpiredTokenError as e:
+            error = HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail=str(e))
+            if self.auto_error:
+                raise error
+            else:
+                return False, error
+        except JoseError as e:
+            error = HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e))
+            if self.auto_error:
+                raise error
+            else:
+                return False, error
+
+        return True, token

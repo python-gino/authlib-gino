@@ -3,15 +3,17 @@ import time
 from fastapi import APIRouter, Security, FastAPI, HTTPException, Depends
 from starlette.status import HTTP_404_NOT_FOUND
 
-from .api import current_user, current_scopes
-from .models import db
+from .api import require_user, current_scopes
+from .models import db, User
 from ..fastapi_session import config
 from ..fastapi_session.models import BearerToken, Session
 
 router = APIRouter()
 
 
-def sessions_query(scopes: set = Security(current_scopes), user=Security(current_user)):
+def sessions_query(
+    user: User = Security(require_user), scopes: set = Security(current_scopes)
+):
     rv = (
         BearerToken.outerjoin(Session)
         .select()

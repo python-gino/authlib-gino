@@ -1,12 +1,13 @@
+from typing import Union, Tuple, Optional
+
 from authlib.jose import JWT
-from authlib.jose.errors import JoseError, ExpiredTokenError
 from authlib.oauth2.rfc6749.util import scope_to_list
 from authlib.oauth2.rfc7636 import CodeChallenge
 from authlib.oidc.discovery import OpenIDProviderMetadata
 from authlib.oidc.discovery import get_well_known_url
 from fastapi import HTTPException
 from fastapi.params import Depends
-from fastapi.security import OAuth2AuthorizationCodeBearer, SecurityScopes
+from fastapi.security import SecurityScopes
 from starlette import status
 
 from ..fastapi_session import config
@@ -14,6 +15,7 @@ from ..fastapi_session.impl import (
     AuthorizationCodeGrant,
     OpenIDCode,
     RefreshTokenGrant,
+    JWTBearer,
 )
 from ..fastapi_session.impl import (
     AuthorizationServer,
@@ -30,8 +32,12 @@ USERINFO_ENDPOINT = "/userinfo"
 JWKS_URI = "/.well-known/jwks.json"
 
 jwt = JWT(algorithms=config.JWT_ALGORITHM)
-oidc_scheme = OAuth2AuthorizationCodeBearer(
-    AUTHORIZATION_ENDPOINT, TOKEN_ENDPOINT, scheme_name="oidc", scopes=SCOPES,
+oidc_scheme = JWTBearer(
+    AUTHORIZATION_ENDPOINT,
+    TOKEN_ENDPOINT,
+    scheme_name="oidc",
+    scopes=SCOPES,
+    auto_error=False,
 )
 metadata = OpenIDProviderMetadata(
     issuer=config.JWT_ISSUER,
@@ -63,22 +69,43 @@ auth.register_grant(
 auth.register_grant(RefreshTokenGrant)
 
 
-def access_token(security_scopes: SecurityScopes, token: str = Depends(oidc_scheme)):
-    try:
-        token = jwt.decode(token, config.JWT_PUBLIC_KEY)
-        token.validate()
-    except ExpiredTokenError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    except JoseError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    if set(security_scopes.scopes) - current_scopes(token):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return token
+def access_token(raise_on_error=True):
+    def _access_token(
+        security_scopes: SecurityScopes,
+        token: Tuple[bool, Union[dict, HTTPException]] = Depends(oidc_scheme),
+    ) -> Optional[dict]:
+        success, payload = token
+        if not success:
+            if raise_on_error:
+                raise payload
+            else:
+                return None
+        if set(security_scopes.scopes) - current_scopes(payload):
+            error = HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+            if raise_on_error:
+                raise error
+            else:
+                return None
+        return payload
+
+    return _access_token
 
 
-def current_user(token: dict = Depends(access_token)):
+def current_user(
+    token: Optional[dict] = Depends(access_token(raise_on_error=False)),
+) -> Optional[User]:
+    if token is None:
+        return None
     return User(id=token["sub"])
 
 
-def current_scopes(token: dict = Depends(access_token)):
+def require_user(token: dict = Depends(access_token())) -> User:
+    return User(id=token["sub"])
+
+
+def current_scopes(
+    token: Optional[dict] = Depends(access_token(raise_on_error=False)),
+) -> set:
+    if token is None:
+        return set()
     return set(scope_to_list(token["sco"]))

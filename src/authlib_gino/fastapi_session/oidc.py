@@ -11,7 +11,7 @@ from .api import (
     USERINFO_ENDPOINT,
     JWKS_URI,
     auth,
-    current_user,
+    require_user,
     metadata,
 )
 from ..fastapi_session import config
@@ -155,7 +155,7 @@ async def token_endpoint(
 
 
 @router.get(USERINFO_ENDPOINT, summary="UserInfo Endpoint. Login required.")
-async def userinfo(user: User = Security(current_user)):
+async def userinfo(user: User = Security(require_user)):
     """
     Protected Resource that, when presented with an Access Token by the Client, returns
     authorized information about the End-User represented by the corresponding
