@@ -21,14 +21,19 @@ class User(db.Model):
     profile = db.Column(JSONB(), nullable=False, default={})
     name = db.StringProperty()
 
+    current_identity = None
+
     def get_user_id(self):
         return self.id
+
+    def get_identity_id(self):
+        return self.current_identity.id
 
 
 class Identity(db.Model):
     __tablename__ = "identities"
 
-    id = db.Column(db.BigInteger(), primary_key=True)
+    id = db.Column(db.Text(), primary_key=True, default=id_generator("idt", 42))
     sub = db.Column(db.String(), nullable=False)
     idp = db.Column(db.String(), nullable=False)
     user_id = db.Column(db.ForeignKey("users.id"), nullable=False)
@@ -52,6 +57,7 @@ class AuthorizationCode(db.Model, AuthorizationCodeMixin):
 
     client_id = db.Column(db.ForeignKey("clients.client_id"), nullable=False)
     user_id = db.Column(db.ForeignKey("users.id"), nullable=False)
+    identity_id = db.Column(db.ForeignKey("identities.id"), nullable=False)
 
 
 class Session(db.Model):
@@ -60,6 +66,7 @@ class Session(db.Model):
     id = db.Column(db.Text(), primary_key=True, default=id_generator("ssn", 48))
     client_id = db.Column(db.ForeignKey("clients.client_id"), nullable=False)
     user_id = db.Column(db.ForeignKey("users.id"), nullable=False)
+    current_identity_id = db.Column(db.ForeignKey("identities.id"), nullable=False)
     scope = db.Column(db.Text(), nullable=False)
     created_at = db.Column(
         db.Integer(), nullable=False, default=lambda: int(time.time())
@@ -80,3 +87,4 @@ class BearerToken(db.Model, BearerTokenMixin):
     session_id = db.Column(db.ForeignKey("sessions.id"), nullable=False)
     client_id = db.Column(db.ForeignKey("clients.client_id"), nullable=False)
     user_id = db.Column(db.ForeignKey("users.id"), nullable=False)
+    identity_id = db.Column(db.ForeignKey("identities.id"), nullable=False)

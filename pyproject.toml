@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "authlib-gino"
-version = "0.2.1"
+version = "0.3.0"
 description = "OpenID Connect provider implemented with Authlib and GINO."
 authors = ["Fantix King <fantix.king@gmail.com>"]
 license = "BSD-3-Clause"
