@@ -13,7 +13,7 @@ from fastapi.security.utils import get_authorization_scheme_param
 from starlette.requests import Request
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_400_BAD_REQUEST
 
-from .models import db
+from .models import db, Identity
 from ..async_grants.authorization_code import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -41,6 +41,7 @@ class AuthorizationServer(_AuthorizationServer):
             dict(
                 iss=config.JWT_ISSUER,
                 sub=str(user.get_user_id()),
+                idt=str(user.get_identity_id()),
                 aud=client.audience,
                 exp=now + config.JWT_TOKEN_TTL,
                 iat=now,
@@ -62,6 +63,7 @@ async def save_token(token: dict, request: OAuth2Request):
     data = dict(
         client_id=request.client_id,
         user_id=request.user.get_user_id(),
+        identity_id=request.user.get_identity_id(),
         issued_at=now,
         **token,
     )
@@ -71,6 +73,7 @@ async def save_token(token: dict, request: OAuth2Request):
         session = await Session.create(
             client_id=data["client_id"],
             user_id=data["user_id"],
+            current_identity_id=data["identity_id"],
             scope=data["scope"],
             created_at=now,
         )
@@ -88,6 +91,7 @@ class AuthorizationCodeGrant(_AuthorizationCodeGrant):
             code=code,
             client_id=request.client_id,
             user_id=request.user.get_user_id(),
+            identity_id=request.user.get_identity_id(),
             scope=request.scope,
             redirect_uri=request.redirect_uri,
             auth_time=int(time.time()),
@@ -108,7 +112,14 @@ class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         await authorization_code.update(used=True).apply()
 
     async def authenticate_user(self, authorization_code: AuthorizationCode):
-        return await User.get(authorization_code.user_id)
+        return await (
+            Identity.outerjoin(User)
+            .select()
+            .where(Identity.id == authorization_code.identity_id)
+            .where(User.id == authorization_code.user_id)
+            .gino.load(User.load(current_identity=Identity))
+            .first()
+        )
 
 
 class RefreshTokenGrant(_RefreshTokenGrant):
@@ -128,7 +139,14 @@ class RefreshTokenGrant(_RefreshTokenGrant):
         )
 
     async def authenticate_user(self, credential: BearerToken):
-        return await User.get(credential.user_id)
+        return await (
+            Identity.outerjoin(User)
+            .select()
+            .where(Identity.id == credential.identity_id)
+            .where(User.id == credential.user_id)
+            .gino.load(User.load(current_identity=Identity))
+            .first()
+        )
 
     async def revoke_old_credential(self, credential: BearerToken):
         await credential.update(revoked_at=int(time.time())).apply()

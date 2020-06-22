@@ -22,7 +22,7 @@ from ..fastapi_session.impl import (
     AuthorizationServer,
     save_token,
 )
-from ..fastapi_session.models import User, Client
+from ..fastapi_session.models import User, Client, Identity
 from ..starlette_oauth2.async_authenticate_client import ClientAuthentication
 
 SCOPES = dict(openid="Any user login requires this scope.", admin="Admin permissions.")
@@ -96,11 +96,13 @@ def current_user(
 ) -> Optional[User]:
     if token is None:
         return None
-    return User(id=token["sub"])
+    rv = User(id=token["sub"])
+    rv.current_identity = Identity(id=token["idt"])
+    return rv
 
 
 def require_user(token: dict = Depends(access_token())) -> User:
-    return User(id=token["sub"])
+    return current_user(token)
 
 
 def current_scopes(

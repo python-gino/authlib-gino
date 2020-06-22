@@ -54,8 +54,8 @@ class AuthorizationServer(_AuthorizationServer):
 
     async def create_oauth2_request(self, request: Request, data=None):
         body = {}
-        if request.method == "POST":
-            body = await request.form()
+        if request.method in {"POST", "PUT"}:
+            body = dict(await request.form())
         if data:
             body.update(data)
         return OAuth2Request(request.method, str(request.url), body, request.headers)
